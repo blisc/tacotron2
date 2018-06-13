@@ -13,7 +13,6 @@ from audio_processing import dynamic_range_decompression
 import torch
 from scipy.io.wavfile import write
 
-
 def plot_spectrogram(ground_truth, generated_sample, post_net_sample, attention,
  logdir, train_step, number=0, append=False, vmin=None, vmax=None):
   fig, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, figsize=(8,12))
@@ -55,12 +54,12 @@ def plot_spectrogram(ground_truth, generated_sample, post_net_sample, attention,
   fig.colorbar(colour4, cax=cbar_ax2)
   # fig.colorbar(colour2, ax=ax2)
 
-
   if append:
-    name = './{}/Output_Step{}_{}_{}.png'.format(logdir, train_step, number, append)
+    name = '{}/Output_Step{}_{}_{}.png'.format(logdir, train_step, number, append)
   else:
-    name = './{}/Output_Step{}_{}.png'.format(logdir, train_step, number)
-  #save
+    name = '{}/Output_Step{}_{}.png'.format(logdir, train_step, number)
+  if logdir[0] != '/':
+    name = "./"+name
   fig.savefig(name, dpi=300)
 
   plt.close(fig)
