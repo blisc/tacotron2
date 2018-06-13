@@ -25,8 +25,8 @@ def create_hparams(hparams_string=None, verbose=False):
         # Data Parameters             #
         ################################
         load_mel_from_disk=False,
-        training_files='/home/jasoli/Downloads/LJSpeech-1.1/train.csv',
-        validation_files='/home/jasoli/Downloads/LJSpeech-1.1/val.csv',
+        training_files='/data/speech/LJSpeech/train.csv',
+        validation_files='/data/speech/LJSpeech/new_val.csv',
         text_cleaners=['english_cleaners'],
         sort_by_length=False,
 
