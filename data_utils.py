@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.utils.data
 
+import os
 import layers
 from utils import load_wav_to_torch, load_filepaths_and_text
 from text import text_to_sequence
@@ -31,9 +32,10 @@ class TextMelLoader(torch.utils.data.Dataset):
 
     def get_mel_text_pair(self, audiopath_and_text):
         # separate filename and text
-        audiopath, text = audiopath_and_text[0], audiopath_and_text[1]
+        audiopath, text = audiopath_and_text[0], audiopath_and_text[2]
+        audiopath = os.path.join("/data/speech/LJSpeech/wavs",audiopath+".wav")
         text = self.get_text(text)
-        mel = self.get_mel(audiopath)
+        mel = self.get_spec(audiopath)
         return (text, mel)
 
     def get_mel(self, filename):
@@ -51,6 +53,16 @@ class TextMelLoader(torch.utils.data.Dataset):
                     melspec.size(0), self.stft.n_mel_channels))
 
         return melspec
+
+    def get_spec(self, filename):
+        audio = load_wav_to_torch(filename, self.sampling_rate)
+        audio_norm = audio / self.max_wav_value
+        audio_norm = audio_norm.unsqueeze(0)
+        audio_norm = torch.autograd.Variable(audio_norm, requires_grad=False)
+        spec = self.stft.spectrogram(audio_norm)
+        spec = torch.squeeze(spec, 0)
+
+        return spec
 
     def get_text(self, text):
         text_norm = torch.IntTensor(text_to_sequence(text, self.text_cleaners))

@@ -1,6 +1,7 @@
 import tensorflow as tf
 from text import symbols
 
+print(symbols)
 
 def create_hparams(hparams_string=None, verbose=False):
     """Create model hyperparameters. Parse nondefault from given string."""
@@ -24,8 +25,8 @@ def create_hparams(hparams_string=None, verbose=False):
         # Data Parameters             #
         ################################
         load_mel_from_disk=False,
-        training_files='filelists/ljs_audio_text_train_filelist.txt',
-        validation_files='filelists/ljs_audio_text_val_filelist.txt',
+        training_files='/home/jasoli/Downloads/LJSpeech-1.1/train.csv',
+        validation_files='/home/jasoli/Downloads/LJSpeech-1.1/val.csv',
         text_cleaners=['english_cleaners'],
         sort_by_length=False,
 
@@ -37,7 +38,7 @@ def create_hparams(hparams_string=None, verbose=False):
         filter_length=1024,
         hop_length=256,
         win_length=1024,
-        n_mel_channels=80,
+        n_mel_channels=513,
         mel_fmin=0.0,
         mel_fmax=None,  # if None, half the sampling rate
 

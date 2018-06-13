@@ -222,6 +222,7 @@ class Decoder(nn.Module):
 
         self.attention_rnn = nn.LSTMCell(
             hparams.decoder_rnn_dim + hparams.encoder_embedding_dim,
+            # hparams.prenet_dim + hparams.encoder_embedding_dim,
             hparams.attention_rnn_dim)
 
         self.attention_layer = Attention(
@@ -351,6 +352,7 @@ class Decoder(nn.Module):
         attention_weights:
         """
 
+        prenet_output = self.prenet(decoder_input)
         cell_input = torch.cat((self.decoder_hidden, self.attention_context), -1)
         self.attention_hidden, self.attention_cell = self.attention_rnn(
             cell_input, (self.attention_hidden, self.attention_cell))
@@ -363,7 +365,6 @@ class Decoder(nn.Module):
             attention_weights_cat, self.mask)
 
         self.attention_weights_cum += self.attention_weights
-        prenet_output = self.prenet(decoder_input)
         decoder_input = torch.cat((prenet_output, self.attention_context), -1)
         self.decoder_hidden, self.decoder_cell = self.decoder_rnn(
             decoder_input, (self.decoder_hidden, self.decoder_cell))
@@ -406,6 +407,42 @@ class Decoder(nn.Module):
             alignments += [attention_weights]
 
             decoder_input = decoder_inputs[len(mel_outputs) - 1]
+
+        mel_outputs, gate_outputs, alignments = self.parse_decoder_outputs(
+            mel_outputs, gate_outputs, alignments)
+
+        return mel_outputs, gate_outputs, alignments
+
+    def validate(self, memory, decoder_inputs, memory_lengths):
+        """ Decoder forward pass for training
+        PARAMS
+        ------
+        memory: Encoder outputs
+        decoder_inputs: Decoder inputs for teacher forcing. i.e. mel-specs
+        memory_lengths: Encoder output lengths for attention masking.
+
+        RETURNS
+        -------
+        mel_outputs: mel outputs from the decoder
+        gate_outputs: gate outputs from the decoder
+        alignments: sequence of attention weights from the decoder
+        """
+
+        decoder_input = self.get_go_frame(memory)
+        decoder_inputs = self.parse_decoder_inputs(decoder_inputs)
+        self.initialize_decoder_states(
+            memory, mask=~get_mask_from_lengths(memory_lengths))
+
+        mel_outputs, gate_outputs, alignments = [], [], []
+
+        while len(mel_outputs) < decoder_inputs.size(0):
+            mel_output, gate_output, attention_weights = self.decode(
+                decoder_input)
+            mel_outputs += [mel_output]
+            gate_outputs += [gate_output.squeeze(1)]
+            alignments += [attention_weights]
+
+            decoder_input = mel_output
 
         mel_outputs, gate_outputs, alignments = self.parse_decoder_outputs(
             mel_outputs, gate_outputs, alignments)
@@ -505,6 +542,33 @@ class Tacotron2(nn.Module):
         encoder_outputs = self.encoder(embedded_inputs, input_lengths)
 
         mel_outputs, gate_outputs, alignments = self.decoder(
+            encoder_outputs, targets, memory_lengths=input_lengths)
+
+        mel_outputs_postnet = self.postnet(mel_outputs)
+        mel_outputs_postnet = mel_outputs + mel_outputs_postnet
+
+        # DataParallel expects equal sized inputs/outputs, hence padding
+        if input_lengths is not None:
+            alignments = alignments.unsqueeze(0)
+            alignments = nn.functional.pad(
+                alignments,
+                (0, max_len - alignments.size(3), 0, 0),
+                "constant", 0)
+            alignments = alignments.squeeze()
+        return self.parse_output(
+            [mel_outputs, mel_outputs_postnet, gate_outputs, alignments],
+            output_lengths)
+
+    def validate(self, inputs):
+        inputs, input_lengths, targets, max_len, \
+            output_lengths = self.parse_input(inputs)
+        input_lengths, output_lengths = input_lengths.data, output_lengths.data
+
+        embedded_inputs = self.embedding(inputs).transpose(1, 2)
+
+        encoder_outputs = self.encoder(embedded_inputs, input_lengths)
+
+        mel_outputs, gate_outputs, alignments = self.decoder.validate(
             encoder_outputs, targets, memory_lengths=input_lengths)
 
         mel_outputs_postnet = self.postnet(mel_outputs)

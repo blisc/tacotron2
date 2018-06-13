@@ -79,12 +79,15 @@ def prepare_directories_and_logger(output_directory, log_directory, rank):
 def load_model(hparams):
     model = Tacotron2(hparams).cuda()
     if hparams.fp16_run:
+        print("1")
         model = batchnorm_to_float(model.half())
         model.decoder.attention_layer.score_mask_value = float(finfo('float16').min)
 
     if hparams.distributed_run:
+        print("2")
         model = DistributedDataParallel(model)
     elif torch.cuda.device_count() > 1:
+        print("3")
         model = DataParallel(model)
 
     return model
@@ -138,7 +141,7 @@ def validate(model, criterion, valset, iteration, batch_size, n_gpus,
 
         for i, batch in enumerate(val_loader):
             x, y = batch_parser(batch)
-            y_pred = model(x)
+            y_pred = model.validate(x)
             loss = criterion(y_pred, y)
             reduced_val_loss = reduce_tensor(loss.data, n_gpus)[0] \
                 if distributed_run else loss.data[0]
@@ -146,7 +149,7 @@ def validate(model, criterion, valset, iteration, batch_size, n_gpus,
         val_loss = val_loss / (i + 1)
 
     model.train()
-    return val_loss
+    return val_loss, y, y_pred
 
 
 def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
@@ -169,6 +172,12 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
     torch.cuda.manual_seed(hparams.seed)
 
     model = load_model(hparams)
+
+    for name, param in model.named_parameters():
+        print(name)
+        print(param.shape)
+    # input()
+    
     learning_rate = hparams.learning_rate
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,
                                  weight_decay=hparams.weight_decay)
@@ -232,11 +241,13 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
                 print("Train loss {} {:.6f} Grad Norm {:.6f} {:.2f}s/it".format(
                     iteration, reduced_loss, grad_norm, duration))
 
-                logger.log_training(
-                    reduced_loss, grad_norm, learning_rate, duration, iteration)
+                if (iteration % hparams.iters_per_checkpoint == 0):
+                    logger.log_training(
+                        reduced_loss, grad_norm, learning_rate, duration, iteration,
+                        y, y_pred, valset.stft)
 
             if not overflow and (iteration % hparams.iters_per_checkpoint == 0):
-                reduced_val_loss = validate(
+                reduced_val_loss, y, y_pred = validate(
                     model, criterion, valset, iteration, hparams.batch_size,
                     n_gpus, collate_fn, logger, hparams.distributed_run, rank)
 
@@ -244,7 +255,7 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
                     print("Validation loss {}: {:9f}  ".format(
                         iteration, reduced_val_loss))
                     logger.log_validation(
-                        reduced_val_loss, model, y, y_pred, iteration)
+                        reduced_val_loss, model, y, y_pred, iteration, valset.stft)
                     checkpoint_path = os.path.join(
                         output_directory, "checkpoint_{}".format(iteration))
                     save_checkpoint(model, optimizer, learning_rate, iteration,
