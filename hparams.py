@@ -54,7 +54,7 @@ def create_hparams(hparams_string=None, verbose=False):
         encoder_embedding_dim=512,
 
         # Decoder parameters
-        n_frames_per_step=1,
+        n_frames_per_step=1,  # currently only 1 is supported
         decoder_rnn_dim=1024,
         prenet_dim=256,
         max_decoder_steps=1000,
@@ -76,6 +76,7 @@ def create_hparams(hparams_string=None, verbose=False):
         ################################
         # Optimization Hyperparameters #
         ################################
+        use_saved_learning_rate=False,
         learning_rate=1e-3,
         weight_decay=1e-6,
         grad_clip_thresh=1,
